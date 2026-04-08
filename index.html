@@ -11,7 +11,7 @@
   .wrap { min-height: 100%; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
   .card { width: 100%; max-width: 880px; }
   .player { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 12px; overflow: hidden; }
-  .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .player iframe, .player video { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; background: #000; }
   .msg { padding: 32px; text-align: center; border: 1px solid #232327; border-radius: 12px; background: #131316; }
   .msg h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
   .msg p { margin: 4px 0; color: #a1a1a8; }
@@ -35,6 +35,7 @@
     const p = new URLSearchParams(h);
     return {
       v: p.get('v'),
+      src: p.get('src'),
       start: p.get('start'),
       end: p.get('end'),
       title: p.get('title') || 'Time Capsule',
@@ -71,12 +72,12 @@
   let countdownEl = null;
 
   function render() {
-    const { v, start, end, title } = parseHash();
+    const { v, src, start, end, title } = parseHash();
 
-    if (!v || !start || !end) {
+    if ((!v && !src) || !start || !end) {
       if (currentView !== 'missing') {
         root.innerHTML = msg('Missing parameters', [
-          'Link must include <code>#v=YOUTUBE_ID&start=ISO&end=ISO</code>',
+          'Link must include <code>#v=YOUTUBE_ID</code> or <code>#src=URL</code>, plus <code>start</code> and <code>end</code>',
           'Example: <code>#v=dQw4w9WgXcQ&start=2026-04-10T19:00:00Z&end=2026-04-10T21:00:00Z</code>',
         ]);
         currentView = 'missing';
@@ -97,6 +98,8 @@
       }
       return;
     }
+
+    const sourceKey = src ? 'src:' + src : 'v:' + v;
 
     if (now < startMs) {
       const view = 'waiting:' + startMs + ':' + endMs + ':' + title;
@@ -125,12 +128,18 @@
       return;
     }
 
-    const view = 'open:' + v + ':' + endMs;
+    const view = 'open:' + sourceKey + ':' + endMs;
     if (currentView !== view) {
-      const src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(v) + '?rel=0&modestbranding=1';
-      root.innerHTML =
-        '<div class="player"><iframe src="' + src + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>' +
-        '<div class="countdown" id="cd" style="text-align:center;margin-top:12px"></div>';
+      let playerHtml;
+      if (src) {
+        // Escape src for attribute context.
+        const safeSrc = String(src).replace(/"/g, '&quot;');
+        playerHtml = '<div class="player"><video src="' + safeSrc + '" controls controlsList="nodownload" disablePictureInPicture oncontextmenu="return false" playsinline></video></div>';
+      } else {
+        const ytSrc = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(v) + '?rel=0&modestbranding=1';
+        playerHtml = '<div class="player"><iframe src="' + ytSrc + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>';
+      }
+      root.innerHTML = playerHtml + '<div class="countdown" id="cd" style="text-align:center;margin-top:12px"></div>';
       currentView = view;
       countdownEl = document.getElementById('cd');
     }
