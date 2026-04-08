@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Time Capsule</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #0b0b0c; color: #e8e8ea; font: 16px/1.5 -apple-system, system-ui, sans-serif; }
+  .wrap { min-height: 100%; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+  .card { width: 100%; max-width: 880px; }
+  .player { position: relative; width: 100%; aspect-ratio: 16/9; background: #000; border-radius: 12px; overflow: hidden; }
+  .player iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; }
+  .msg { padding: 32px; text-align: center; border: 1px solid #232327; border-radius: 12px; background: #131316; }
+  .msg h1 { margin: 0 0 8px; font-size: 20px; font-weight: 600; }
+  .msg p { margin: 4px 0; color: #a1a1a8; }
+  .countdown { margin-top: 16px; font-variant-numeric: tabular-nums; font-size: 14px; color: #c8c8cf; }
+  code { background: #1c1c20; padding: 2px 6px; border-radius: 4px; font-size: 13px; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card" id="root"></div>
+  </div>
+
+<script>
+(function () {
+  const root = document.getElementById('root');
+
+  function parseHash() {
+    const h = location.hash.replace(/^#/, '');
+    const p = new URLSearchParams(h);
+    return {
+      v: p.get('v'),
+      start: p.get('start'),
+      end: p.get('end'),
+      title: p.get('title') || 'Time Capsule',
+    };
+  }
+
+  function fmt(d) {
+    try { return new Date(d).toLocaleString(); } catch { return d; }
+  }
+
+  function msg(title, lines) {
+    return `<div class="msg"><h1>${title}</h1>${lines.map(l => `<p>${l}</p>`).join('')}</div>`;
+  }
+
+  function countdownText(ms) {
+    if (ms <= 0) return '';
+    const s = Math.floor(ms / 1000);
+    const d = Math.floor(s / 86400);
+    const h = Math.floor((s % 86400) / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    const parts = [];
+    if (d) parts.push(d + 'd');
+    if (d || h) parts.push(h + 'h');
+    if (d || h || m) parts.push(m + 'm');
+    parts.push(sec + 's');
+    return parts.join(' ');
+  }
+
+  function render() {
+    const { v, start, end, title } = parseHash();
+
+    if (!v || !start || !end) {
+      root.innerHTML = msg('Missing parameters', [
+        'Link must include <code>#v=YOUTUBE_ID&start=ISO&end=ISO</code>',
+        'Example: <code>#v=dQw4w9WgXcQ&start=2026-04-10T19:00:00Z&end=2026-04-10T21:00:00Z</code>',
+      ]);
+      return;
+    }
+
+    const now = Date.now();
+    const startMs = Date.parse(start);
+    const endMs = Date.parse(end);
+
+    if (isNaN(startMs) || isNaN(endMs)) {
+      root.innerHTML = msg('Invalid date', ['<code>start</code> and <code>end</code> must be ISO 8601.']);
+      return;
+    }
+
+    if (now < startMs) {
+      root.innerHTML = msg(title, [
+        'Available from <strong>' + fmt(startMs) + '</strong>',
+        'until <strong>' + fmt(endMs) + '</strong>',
+        '<div class="countdown">Opens in ' + countdownText(startMs - now) + '</div>',
+      ]);
+      return;
+    }
+
+    if (now > endMs) {
+      root.innerHTML = msg(title, [
+        'This time capsule has closed.',
+        'Window ended <strong>' + fmt(endMs) + '</strong>',
+      ]);
+      return;
+    }
+
+    const src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(v) + '?rel=0&modestbranding=1';
+    root.innerHTML =
+      '<div class="player"><iframe src="' + src + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>' +
+      '<div class="countdown" style="text-align:center;margin-top:12px">Closes in ' + countdownText(endMs - now) + '</div>';
+  }
+
+  render();
+  setInterval(render, 1000);
+  window.addEventListener('hashchange', render);
+})();
+</script>
+</body>
+</html>
