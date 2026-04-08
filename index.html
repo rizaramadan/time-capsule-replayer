@@ -64,14 +64,24 @@
     return parts.join(' ');
   }
 
+  // currentView tracks what is mounted in the DOM so we only rebuild on state change.
+  // Keys: 'missing' | 'invalid' | 'waiting' | 'open' | 'closed'
+  // Suffix with video id for 'open' so a hashchange to a different video rebuilds.
+  let currentView = null;
+  let countdownEl = null;
+
   function render() {
     const { v, start, end, title } = parseHash();
 
     if (!v || !start || !end) {
-      root.innerHTML = msg('Missing parameters', [
-        'Link must include <code>#v=YOUTUBE_ID&start=ISO&end=ISO</code>',
-        'Example: <code>#v=dQw4w9WgXcQ&start=2026-04-10T19:00:00Z&end=2026-04-10T21:00:00Z</code>',
-      ]);
+      if (currentView !== 'missing') {
+        root.innerHTML = msg('Missing parameters', [
+          'Link must include <code>#v=YOUTUBE_ID&start=ISO&end=ISO</code>',
+          'Example: <code>#v=dQw4w9WgXcQ&start=2026-04-10T19:00:00Z&end=2026-04-10T21:00:00Z</code>',
+        ]);
+        currentView = 'missing';
+        countdownEl = null;
+      }
       return;
     }
 
@@ -80,31 +90,51 @@
     const endMs = Date.parse(end);
 
     if (isNaN(startMs) || isNaN(endMs)) {
-      root.innerHTML = msg('Invalid date', ['<code>start</code> and <code>end</code> must be ISO 8601.']);
+      if (currentView !== 'invalid') {
+        root.innerHTML = msg('Invalid date', ['<code>start</code> and <code>end</code> must be ISO 8601.']);
+        currentView = 'invalid';
+        countdownEl = null;
+      }
       return;
     }
 
     if (now < startMs) {
-      root.innerHTML = msg(title, [
-        'Available from <strong>' + fmt(startMs) + '</strong>',
-        'until <strong>' + fmt(endMs) + '</strong>',
-        '<div class="countdown">Opens in ' + countdownText(startMs - now) + '</div>',
-      ]);
+      const view = 'waiting:' + startMs + ':' + endMs + ':' + title;
+      if (currentView !== view) {
+        root.innerHTML = msg(title, [
+          'Available from <strong>' + fmt(startMs) + '</strong>',
+          'until <strong>' + fmt(endMs) + '</strong>',
+          '<div class="countdown" id="cd"></div>',
+        ]);
+        currentView = view;
+        countdownEl = document.getElementById('cd');
+      }
+      if (countdownEl) countdownEl.textContent = 'Opens in ' + countdownText(startMs - now);
       return;
     }
 
     if (now > endMs) {
-      root.innerHTML = msg(title, [
-        'This time capsule has closed.',
-        'Window ended <strong>' + fmt(endMs) + '</strong>',
-      ]);
+      if (currentView !== 'closed:' + endMs) {
+        root.innerHTML = msg(title, [
+          'This time capsule has closed.',
+          'Window ended <strong>' + fmt(endMs) + '</strong>',
+        ]);
+        currentView = 'closed:' + endMs;
+        countdownEl = null;
+      }
       return;
     }
 
-    const src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(v) + '?rel=0&modestbranding=1';
-    root.innerHTML =
-      '<div class="player"><iframe src="' + src + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>' +
-      '<div class="countdown" style="text-align:center;margin-top:12px">Closes in ' + countdownText(endMs - now) + '</div>';
+    const view = 'open:' + v + ':' + endMs;
+    if (currentView !== view) {
+      const src = 'https://www.youtube-nocookie.com/embed/' + encodeURIComponent(v) + '?rel=0&modestbranding=1';
+      root.innerHTML =
+        '<div class="player"><iframe src="' + src + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></div>' +
+        '<div class="countdown" id="cd" style="text-align:center;margin-top:12px"></div>';
+      currentView = view;
+      countdownEl = document.getElementById('cd');
+    }
+    if (countdownEl) countdownEl.textContent = 'Closes in ' + countdownText(endMs - now);
   }
 
   render();
