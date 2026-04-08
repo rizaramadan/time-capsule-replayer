@@ -28,17 +28,21 @@
 (function () {
   const root = document.getElementById('root');
 
+  // Loaded from config.json on startup. Hash params override these per-request (useful for testing).
+  let fileConfig = {};
+
   function parseHash() {
     // URLSearchParams decodes '+' as space, breaking ISO timezone offsets like +07:00.
     // Pre-encode literal '+' so it survives as '+'.
     const h = location.hash.replace(/^#/, '').replace(/\+/g, '%2B');
     const p = new URLSearchParams(h);
+    const pick = (k) => p.get(k) != null ? p.get(k) : fileConfig[k];
     return {
-      v: p.get('v'),
-      src: p.get('src'),
-      start: p.get('start'),
-      end: p.get('end'),
-      title: p.get('title') || 'Time Capsule',
+      v: pick('v'),
+      src: pick('src'),
+      start: pick('start'),
+      end: pick('end'),
+      title: pick('title') || 'Time Capsule',
     };
   }
 
@@ -145,6 +149,16 @@
     }
     if (countdownEl) countdownEl.textContent = 'Closes in ' + countdownText(endMs - now);
   }
+
+  // Fetch config.json with cache-bust so config edits propagate after a reload.
+  // Page still renders if config.json is missing (hash-only mode).
+  fetch('./config.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { return r.ok ? r.json() : {}; })
+    .catch(function () { return {}; })
+    .then(function (cfg) {
+      fileConfig = cfg || {};
+      render();
+    });
 
   render();
   setInterval(render, 1000);
