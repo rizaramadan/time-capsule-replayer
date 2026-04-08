@@ -29,7 +29,9 @@
   const root = document.getElementById('root');
 
   function parseHash() {
-    const h = location.hash.replace(/^#/, '');
+    // URLSearchParams decodes '+' as space, breaking ISO timezone offsets like +07:00.
+    // Pre-encode literal '+' so it survives as '+'.
+    const h = location.hash.replace(/^#/, '').replace(/\+/g, '%2B');
     const p = new URLSearchParams(h);
     return {
       v: p.get('v'),
