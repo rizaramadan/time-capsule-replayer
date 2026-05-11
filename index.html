@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
-<title>Time Capsule</title>
+<title>Episode Replayer</title>
 <style>
   :root { color-scheme: dark; }
   html, body { margin: 0; height: 100%; background: #0b0b0c; color: #e8e8ea; font: 16px/1.5 -apple-system, system-ui, sans-serif; }
@@ -42,8 +42,26 @@
       src: pick('src'),
       start: pick('start'),
       end: pick('end'),
-      title: pick('title') || 'Time Capsule',
+      title: pick('title') || 'Episode Replayer',
+      t: pick('t'),
     };
+  }
+
+  // SHA-256 the URL token once per value and cache it. render() compares the
+  // cached hash to fileConfig.tokenHash to gate the player.
+  let tokenAuth = { raw: null, hash: null, pending: false };
+  async function ensureTokenHash(raw) {
+    if (raw === tokenAuth.raw) return;
+    tokenAuth.raw = raw;
+    tokenAuth.hash = null;
+    if (!raw) { render(); return; }
+    tokenAuth.pending = true;
+    const buf = new TextEncoder().encode(raw);
+    const digest = await crypto.subtle.digest('SHA-256', buf);
+    tokenAuth.hash = Array.from(new Uint8Array(digest))
+      .map(function (b) { return b.toString(16).padStart(2, '0'); }).join('');
+    tokenAuth.pending = false;
+    render();
   }
 
   function fmt(d) {
@@ -76,7 +94,26 @@
   let countdownEl = null;
 
   function render() {
-    const { v, src, start, end, title } = parseHash();
+    const { v, src, start, end, title, t } = parseHash();
+
+    // Gate: token must hash to fileConfig.tokenHash. If config hasn't loaded yet
+    // (no tokenHash present), defer rendering until it does to avoid a flash of
+    // "Access required" while config.json is in flight.
+    if (fileConfig.tokenHash) {
+      if (t !== tokenAuth.raw) { ensureTokenHash(t); return; }
+      if (tokenAuth.pending) return;
+      if (!t || tokenAuth.hash !== fileConfig.tokenHash) {
+        if (currentView !== 'denied') {
+          root.innerHTML = msg('Access required', [
+            'This link needs a valid access token.',
+            'Make sure your URL includes <code>#t=YOUR_TOKEN</code>.',
+          ]);
+          currentView = 'denied';
+          countdownEl = null;
+        }
+        return;
+      }
+    }
 
     if ((!v && !src) || !start || !end) {
       if (currentView !== 'missing') {
@@ -123,7 +160,7 @@
     if (now > endMs) {
       if (currentView !== 'closed:' + endMs) {
         root.innerHTML = msg(title, [
-          'This time capsule has closed.',
+          'This episode is no longer available.',
           'Window ended <strong>' + fmt(endMs) + '</strong>',
         ]);
         currentView = 'closed:' + endMs;
